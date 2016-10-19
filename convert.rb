@@ -88,6 +88,7 @@ end
 def process(country, version, file, w)
   path = "../gm#{country}#{version}/#{file}.shp"
   return if country == 'aq' && (not file.include?('wgs84'))
+  return if country == 'ge' && version == '20' && (not file.include?('wgs84'))
   p path
   ShpFile.open(path) {|shp|
     keys = shp.fields.map {|f|
@@ -128,7 +129,8 @@ end
 
 def fan_out(country, version)
   0.upto(8) {|z|
-    FileUtils.rm_r("../gm#{country}#{version}vt/#{z}/")
+    dir = "../gm#{country}#{version}vt/#{z}/"
+    FileUtils.rm_r(dir) if File.directory?(dir)
   }
   db = Sequel.sqlite("../gm#{country}#{version}vt/data.mbtiles")
   md = {}
@@ -160,7 +162,7 @@ end
 Dir.glob('../gm*vt') {|target_dir|
   next unless /^gm(.*?)(\d\d)vt$/.match File.basename(target_dir)
   (country, version) = $1, $2
-  #next unless country == 'eu'
+  #next unless country == 'ge'
   src_dir = "../gm#{country}#{version}"
   print "converting #{country}#{version}\n"
   #next if File.exist?("../gm#{country}#{version}vt/data.mbtiles") ##
