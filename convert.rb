@@ -2,6 +2,11 @@ require 'georuby'
 require 'geo_ruby/shp'
 require 'geo_ruby/geojson'
 require 'json'
+require 'sqlite3'
+require 'sequel'
+require 'zlib'
+require 'stringio'
+require 'fileutils'
 include GeoRuby::Shp4r
 
 def prepare(country, version)
@@ -63,10 +68,17 @@ def tippecanoe(attributes)
   f_code = attributes['f_code']
   r = {:maxzoom => 8, :layer => f_code}
   case f_code
-  when 'BA010', 'FA000', 'FA001'
+  when 'BA010', 'FA000'# , 'FA001' #= polbnda
     r[:minzoom] = 0
   when 'AP030'
-    r[:minzoom] = 6
+    case attributes['rtt']
+    when 14
+      r[:minzoom] = 5
+    when 15
+      r[:minzoom] = 6
+    else
+      r[:minzoom] = 8
+    end
   else
     r[:minzoom] = 8
   end
@@ -75,6 +87,7 @@ end
 
 def process(country, version, file, w)
   path = "../gm#{country}#{version}/#{file}.shp"
+  return if country == 'aq' && (not file.include?('wgs84'))
   p path
   ShpFile.open(path) {|shp|
     keys = shp.fields.map {|f|
@@ -102,8 +115,6 @@ def process(country, version, file, w)
 end
 
 def convert(country, version)
-  print "converting #{country}#{version}.\n"
-#  return if File.exist?("../gm#{country}#{version}vt/data.mbtiles") ##
   files = Dir.glob("../gm#{country}#{version}/*.shp").map {|path|
     File.basename(path, '.shp')} - %w{tileref tileret}
   File.open("../gm#{country}#{version}vt/data.ndjson", 'w') {|w|
@@ -112,15 +123,49 @@ def convert(country, version)
     }
   }
 #  system "../tippecanoe/tippecanoe -P -Bg --minimum-zoom=3 --maximum-zoom=8 -f -o ../gm#{country}#{version}vt/data.mbtiles -n gmvt -l gmvt ../gm#{country}#{version}vt/data.ndjson"
- system "../tippecanoe/tippecanoe -P -Bg --maximum-zoom=8 -f -o ../gm#{country}#{version}vt/data.mbtiles -layer=gmvt-default ../gm#{country}#{version}vt/data.ndjson"
+ system "../tippecanoe/tippecanoe -P -Bg --maximum-zoom=8 -f -o ../gm#{country}#{version}vt/data.mbtiles --layer=gmvt-default ../gm#{country}#{version}vt/data.ndjson"
+end
+
+def fan_out(country, version)
+  0.upto(8) {|z|
+    FileUtils.rm_r("../gm#{country}#{version}vt/#{z}/")
+  }
+  db = Sequel.sqlite("../gm#{country}#{version}vt/data.mbtiles")
+  md = {}
+  db[:metadata].all.each {|pair|
+    key = pair[:name]
+    value = pair[:value]
+    next unless %w{minzoom maxzoom center bounds}.include?(key)
+    value = value.to_i if %w{minzoom maxzoom}.include?(key)
+    value = value.split(',').map{|v| v.to_f} if %w{center bounds}.include?(key)
+    md[key] = value
+  }
+  File.write("../gm#{country}#{version}vt/metadata.json", JSON::dump(md))
+  count = 0
+  db[:tiles].each {|r|
+    z = r[:zoom_level]
+    x = r[:tile_column]
+    y = (1 << r[:zoom_level]) - r[:tile_row] - 1
+    data = r[:tile_data]
+    dir = "../gm#{country}#{version}vt/#{z}/#{x}"
+    FileUtils::mkdir_p(dir) unless File.directory?(dir)
+    File.open("#{dir}/#{y}.mvt", 'w') {|w|
+      w.print Zlib::GzipReader.new(StringIO.new(data)).read
+      count += 1
+    }
+  }
+  print "wrote #{count} tiles.\n"
 end
 
 Dir.glob('../gm*vt') {|target_dir|
   next unless /^gm(.*?)(\d\d)vt$/.match File.basename(target_dir)
   (country, version) = $1, $2
-  #next unless country == 'jp'
+  #next unless country == 'eu'
   src_dir = "../gm#{country}#{version}"
+  print "converting #{country}#{version}\n"
+  #next if File.exist?("../gm#{country}#{version}vt/data.mbtiles") ##
   raise "src_dir #{src_dir} does not exist." unless File.directory?(src_dir)
   prepare(country, version)
   convert(country, version)
+  fan_out(country, version)
 }
