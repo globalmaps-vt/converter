@@ -64,14 +64,29 @@ def clean_attributes(attributes, keys, country)
   r
 end
 
-def tippecanoe(attributes)
-  f_code = attributes['f_code']
+def geom_type(g)
+  case g.text_geometry_type
+  when 'POINT'
+    'pt'
+  when 'MULTIPOINT'
+    'pt'
+  when 'MULTILINESTRING'
+    'ls'
+  when 'MULTIPOLYGON'
+    'pg'
+  else
+    raise "unsupported geometry type #{g.class}"
+  end
+end
+
+def tippecanoe(f)
+  f_code = geom_type(f.geometry) + f.data['f_code']
   r = {:maxzoom => 8, :layer => f_code}
   case f_code
   when 'BA010', 'FA000'# , 'FA001' #= polbnda
     r[:minzoom] = 0
   when 'AP030'
-    case attributes['rtt']
+    case f.data['rtt']
     when 14
       r[:minzoom] = 5
     when 15
@@ -100,7 +115,7 @@ def process(country, version, file, w)
       next if f.geometry.nil? # for gmjp22
       feature = {
         :type => 'Feature',
-        :tippecanoe => tippecanoe(f.data),
+        :tippecanoe => tippecanoe(f),
         :geometry => clean_geometry(JSON::parse(f.geometry.to_json)),
         :properties => clean_attributes(f.data, keys, country)
       }
