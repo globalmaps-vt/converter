@@ -80,8 +80,8 @@ def geom_type(g)
 end
 
 def tippecanoe(f)
-  f_code = geom_type(f.geometry) + f.data['f_code']
-  r = {:maxzoom => 8, :layer => f_code}
+  f_code = f.data['f_code']
+  r = {:maxzoom => 8, :layer => geom_type(f.geometry) + f_code}
   case f_code
   when 'BA010', 'FA000'# , 'FA001' #= polbnda
     r[:minzoom] = 0
