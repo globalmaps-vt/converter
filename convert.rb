@@ -177,7 +177,7 @@ end
 Dir.glob('../gm*vt') {|target_dir|
   next unless /^gm(.*?)(\d\d)vt$/.match File.basename(target_dir)
   (country, version) = $1, $2
-  #next unless country == 'ge'
+  #next unless country == 'mg'
   src_dir = "../gm#{country}#{version}"
   print "converting #{country}#{version}\n"
   #next if File.exist?("../gm#{country}#{version}vt/data.mbtiles") ##
