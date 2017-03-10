@@ -8,6 +8,7 @@ require 'zlib'
 require 'stringio'
 require 'fileutils'
 include GeoRuby::Shp4r
+MAX_ZOOM = 9
 
 def prepare(country, version)
   File.open("../gm#{country}#{version}vt/.gitignore", 'w') {|w|
@@ -16,6 +17,9 @@ data.ndjson
 data.mbtiles
     EOS
   }
+  cmd = "rm -r ../gm#{country}#{version}vt/0 ../gm#{country}#{version}vt/1 ../gm#{country}#{version}vt/2 ../gm#{country}#{version}vt/3 ../gm#{country}#{version}vt/4 ../gm#{country}#{version}vt/5 ../gm#{country}#{version}vt/6 ../gm#{country}#{version}vt/7 ../gm#{country}#{version}vt/8 ../gm#{country}#{version}vt/9 ../gm#{country}#{version}vt/10"
+  p cmd
+  system cmd
 end
 
 # eliminate z and m
@@ -81,7 +85,7 @@ end
 
 def tippecanoe(f)
   f_code = f.data['f_code']
-  r = {:maxzoom => 8, :layer => geom_type(f.geometry) + f_code}
+  r = {:maxzoom => MAX_ZOOM, :layer => geom_type(f.geometry) + f_code}
   case f_code
   when 'BA010', 'FA000'# , 'FA001' #= polbnda
     r[:minzoom] = 0
@@ -139,11 +143,11 @@ def convert(country, version)
     }
   }
 #  system "../tippecanoe/tippecanoe -P -Bg --minimum-zoom=3 --maximum-zoom=8 -f -o ../gm#{country}#{version}vt/data.mbtiles -n gmvt -l gmvt ../gm#{country}#{version}vt/data.ndjson"
- system "../tippecanoe/tippecanoe -P -Bg --maximum-zoom=8 -f -o ../gm#{country}#{version}vt/data.mbtiles --layer=gmvt-default ../gm#{country}#{version}vt/data.ndjson"
+ system "../tippecanoe/tippecanoe -P -B#{MAX_ZOOM}  --maximum-zoom=#{MAX_ZOOM} -f -o ../gm#{country}#{version}vt/data.mbtiles --layer=gmvt-default ../gm#{country}#{version}vt/data.ndjson"
 end
 
 def fan_out(country, version)
-  0.upto(8) {|z|
+  0.upto(MAX_ZOOM) {|z|
     dir = "../gm#{country}#{version}vt/#{z}/"
     FileUtils.rm_r(dir) if File.directory?(dir)
   }
@@ -177,7 +181,7 @@ end
 Dir.glob('../gm*vt') {|target_dir|
   next unless /^gm(.*?)(\d\d)vt$/.match File.basename(target_dir)
   (country, version) = $1, $2
-  #next unless country == 'mg'
+  #next unless country == 'hn' && version == '20'
   src_dir = "../gm#{country}#{version}"
   print "converting #{country}#{version}\n"
   #next if File.exist?("../gm#{country}#{version}vt/data.mbtiles") ##
